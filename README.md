@@ -2,11 +2,17 @@
 Implementation to collect queryInfo in S3 using presto event listener.
 1. Create a directory $PRESTO_HOME/plugin/event-listener and upload the presto-event-listener-1.0-SNAPSHOT.jar there
 2. Create a new file at $PRESTO_HOME/etc/event-listener.properties with following details:
+    
     event-listener.name=event-listener
+    
     accessKey=** 
+    
     secretKey=**
+    
     bucket=<bucket-name>
+    
     tableLocationKey=<location-in-bucket>
+    
 3. Restart presto server
 4. Create a new table at s3 location using Hive:
     
@@ -58,4 +64,4 @@ OUTPUTFORMAT
   
 LOCATION
 
-  's3://<bucket>/<location-in-bucket>'
+  's3://\<bucket\>/\<location-in-bucket\>'
