@@ -7,13 +7,25 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import org.apache.commons.io.FileUtils;
+import sun.security.jca.GetInstance;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.lang.reflect.Array;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.commons.io.FileUtils.writeStringToFile;
 
 /**
@@ -26,6 +38,10 @@ public class S3Uploader implements Callable{
     private static final String FILE_FORMAT = ".txt";
 
     private BlockingQueue<String> queue;
+
+    private ArrayList<String> stats;
+
+    private Calendar now;
 
     private AmazonS3 s3Client;
 
@@ -40,6 +56,7 @@ public class S3Uploader implements Callable{
         this.s3TableLocationKey = s3TableLocationKey;
 
         queue = new LinkedBlockingQueue();
+        stats = new ArrayList<>();
         BasicAWSCredentials awsCreds = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
         s3Client = AmazonS3ClientBuilder.standard()
                 .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
@@ -48,14 +65,24 @@ public class S3Uploader implements Callable{
     }
 
     public void queueUpload(String peakMemStats) {
-        queue.add(peakMemStats);
+        //queue.add(peakMemStats);
+        stats.add(peakMemStats);
     }
 
     public Object call() throws Exception {
         while (running)
         {
-            PutObjectRequest putObjectRequest = getRequest(queue.take());
-            uploadToS3(putObjectRequest);
+            now = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+            if(now.get(Calendar.MINUTE) % 15 == 0) {
+                //queue.drainTo(stats);
+                //queue.clear();
+                if(!stats.isEmpty()) {
+                    PutObjectRequest putObjectRequest = getRequest(stats);
+                    uploadToS3(putObjectRequest);
+                    stats.clear();
+                    MINUTES.sleep(10);
+                }
+            }
         }
         return Boolean.TRUE;
     }
@@ -70,10 +97,32 @@ public class S3Uploader implements Callable{
         }
     }
 
-    public PutObjectRequest getRequest (String row) throws IOException {
+    public PutObjectRequest getRequest (ArrayList<String> rows) throws IOException {
         File file = new File("tempfile");
-        FileUtils.writeStringToFile(file, row);
-        PutObjectRequest request = new PutObjectRequest(s3Bucket, s3TableLocationKey+"/"+ System.currentTimeMillis()+FILE_FORMAT, file);
+        FileWriter fw = new FileWriter("tempfile", true);
+        BufferedWriter bw = new BufferedWriter(fw);
+        PrintWriter out = new PrintWriter(bw);
+        for(String row : rows) {
+            out.println(row);
+        }
+
+        LocalDateTime ldt = LocalDateTime.ofInstant(now.toInstant(), now.getTimeZone().toZoneId());
+        DateTimeFormatter format1 = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH);
+        String strDate = format1.format(ldt);
+        int min = now.get(Calendar.MINUTE);
+        int hr;
+        int quad;
+        if(min < 2)
+            hr = now.get(Calendar.HOUR_OF_DAY) - 1;
+        else
+            hr = now.get(Calendar.HOUR_OF_DAY);
+        if(min/15 == 0)
+            quad = 4;
+        else
+            quad = min/15;
+
+        PutObjectRequest request =
+                new PutObjectRequest(s3Bucket, s3TableLocationKey + "/" + strDate + "/hour=" + hr + "/quadrant=" + quad + "-" + System.currentTimeMillis()+ FILE_FORMAT, file);
         return  request;
     }
 
