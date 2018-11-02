@@ -49,6 +49,8 @@ Implementation to collect queryInfo in S3 using presto event listener.
   `totalmemory` double, 
   
   `queryinfojson` string)
+
+PARTITIONED BY (dt date, hr string)
   
 ROW FORMAT DELIMITED 
 
@@ -65,3 +67,6 @@ OUTPUTFORMAT
 LOCATION
 
   's3://\<bucket\>/\<location-in-bucket\>'
+
+5.Recover partitions
+    ALTER TABLE eventlistener RECOVER PARTITIONS;
